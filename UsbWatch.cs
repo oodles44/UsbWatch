@@ -129,11 +129,11 @@ class AboutForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 520);
+        ClientSize = new Size(560, 542);
 
         Panel head = new Panel();
         head.Dock = DockStyle.Top;
-        head.Height = 76;
+        head.Height = 98;
         head.BackColor = Theme.Panel;
         head.Paint += delegate(object s, PaintEventArgs e)
         {
@@ -149,16 +149,58 @@ class AboutForm : Form
         head.Controls.Add(title);
 
         Label ver = new Label();
-        ver.Text = "Live USB device monitor   ·   version v" + BuildInfo.Stamp;
+        ver.Text = "Live USB device monitor   \u00B7   v" + BuildInfo.Version + "  (build " + BuildInfo.Stamp + ")";
         ver.AutoSize = true;
         ver.ForeColor = Theme.Cyan;
         ver.Location = new Point(23, 46);
         head.Controls.Add(ver);
 
+        // Author credit with a clickable link to the project page.
+        const string RepoUrl = "https://github.com/oodles44/UsbWatch";
+        string creditPrefix = "Created by Dakota M   \u00B7   ";
+        string creditLink = "github.com/oodles44/UsbWatch";
+        LinkLabel credit = new LinkLabel();
+        credit.Text = creditPrefix + creditLink;
+        credit.LinkArea = new LinkArea(creditPrefix.Length, creditLink.Length);
+        credit.AutoSize = true;
+        credit.ForeColor = Theme.Dim;
+        credit.LinkColor = Theme.Cyan;
+        credit.ActiveLinkColor = Theme.Pink;
+        credit.VisitedLinkColor = Theme.Cyan;
+        credit.LinkBehavior = LinkBehavior.HoverUnderline;
+        credit.BackColor = Theme.Panel;
+        credit.Location = new Point(23, 70);
+        credit.LinkClicked += delegate
+        {
+            try { System.Diagnostics.Process.Start(RepoUrl); } catch { }
+        };
+        head.Controls.Add(credit);
+
         Panel foot = new Panel();
         foot.Dock = DockStyle.Bottom;
         foot.Height = 48;
         foot.BackColor = Theme.Panel;
+
+        // Support link on the left of the footer (the Close button sits on the right).
+        const string SupportUrl = "https://buymeacoffee.com/oodles44";
+        string supportPrefix = "Enjoying UsbWatch?  ";
+        string supportLink = "Buy me a coffee";
+        LinkLabel support = new LinkLabel();
+        support.Text = supportPrefix + supportLink;
+        support.LinkArea = new LinkArea(supportPrefix.Length, supportLink.Length);
+        support.AutoSize = true;
+        support.ForeColor = Theme.Dim;
+        support.LinkColor = Theme.Cyan;
+        support.ActiveLinkColor = Theme.Pink;
+        support.VisitedLinkColor = Theme.Cyan;
+        support.LinkBehavior = LinkBehavior.HoverUnderline;
+        support.BackColor = Theme.Panel;
+        support.Location = new Point(20, 16);
+        support.LinkClicked += delegate
+        {
+            try { System.Diagnostics.Process.Start(SupportUrl); } catch { }
+        };
+        foot.Controls.Add(support);
 
         Button close = new Button();
         close.Text = "Close";
@@ -256,12 +298,14 @@ class AboutForm : Form
             if (line.StartsWith("## "))
             {
                 if (inEntry) AppendRun("\n", Theme.Fg, body, 0, 0);   // gap between entries
-                AppendRun(line.Substring(3).Trim() + "\n", Theme.Purple, head, 0, 0);
+                // "## [1.0.0] - 2026-11-11" is shown as "1.0.0 - 2026-11-11"
+                string title = line.Substring(3).Trim().Replace("[", "").Replace("]", "");
+                AppendRun(title + "\n", Theme.Purple, head, 0, 0);
                 inEntry = true;
             }
             else if (line.StartsWith("- ") || line.StartsWith("* "))
             {
-                AppendRun("•  " + line.Substring(2).Trim() + "\n", Theme.Fg, body, 6, 16);
+                AppendRun("\u2022  " + line.Substring(2).Trim() + "\n", Theme.Fg, body, 6, 16);
             }
         }
         rt.Select(0, 0);
@@ -565,8 +609,9 @@ class MainForm : Form
         status.Items.Add(lblProblems);
         status.Items.Add(lblLast);
 
-        // Version = build date/time, stamped into BuildInfo.cs by Build.bat on every build.
-        ToolStripStatusLabel lblVer = new ToolStripStatusLabel("v" + BuildInfo.Stamp);
+        // Release version (from CHANGELOG.md) plus the exact build date/time, both written into
+        // BuildInfo.cs by Build.bat on every build.
+        ToolStripStatusLabel lblVer = new ToolStripStatusLabel("v" + BuildInfo.Version + " (build " + BuildInfo.Stamp + ")");
         lblVer.ForeColor = Theme.Comment;
         lblVer.Margin = new Padding(16, 3, 0, 2);
         status.Items.Add(lblVer);

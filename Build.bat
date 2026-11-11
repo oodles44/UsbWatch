@@ -1,12 +1,22 @@
 @echo off
 rem Builds UsbWatch.exe using the C# compiler that ships with Windows (no SDK needed),
-rem then launches it. Stamps the build date/time into BuildInfo.cs (shown as the version)
-rem and embeds CHANGELOG.md (shown in Settings > About).
+rem then launches it.
+rem   - Release version: read from the newest "## [x.y.z]" heading in CHANGELOG.md
+rem   - Build stamp:     the current date/time, shown next to the version in the app
+rem   - CHANGELOG.md is embedded in the exe and shown in Settings > About
 setlocal
 cd /d "%~dp0"
 
 if not exist CHANGELOG.md (
   echo ERROR: CHANGELOG.md not found next to Build.bat.
+  pause
+  exit /b 1
+)
+
+set VERSION=
+for /f "tokens=2 delims=[]" %%v in ('findstr /b /l /c:"## [" CHANGELOG.md') do if not defined VERSION set VERSION=%%v
+if not defined VERSION (
+  echo ERROR: no release heading like "## [1.0.0]" found in CHANGELOG.md.
   pause
   exit /b 1
 )
@@ -22,7 +32,15 @@ set STAMP=
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyy.MM.dd-HHmm'"`) do set STAMP=%%i
 if "%STAMP%"=="" set STAMP=unknown
 
-> BuildInfo.cs echo static class BuildInfo { public const string Stamp = "%STAMP%"; }
+rem Generated file: version constants for the UI, plus the exe's file-properties metadata.
+> BuildInfo.cs echo [assembly: System.Reflection.AssemblyVersion("%VERSION%.0")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyFileVersion("%VERSION%.0")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyInformationalVersion("%VERSION%+%STAMP%")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyTitle("UsbWatch")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyProduct("UsbWatch")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyDescription("Live USB device connect/disconnect monitor")]
+>> BuildInfo.cs echo [assembly: System.Reflection.AssemblyCopyright("Copyright (c) 2026 Dakota McGilton")]
+>> BuildInfo.cs echo static class BuildInfo { public const string Version = "%VERSION%"; public const string Stamp = "%STAMP%"; }
 
 rem Embed UsbWatch.ico as the exe's file icon (Explorer, taskbar pin, shortcuts).
 set ICON=
@@ -42,7 +60,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Built UsbWatch.exe  version %STAMP%
+echo Built UsbWatch.exe  version %VERSION%+%STAMP%
 start "" "%~dp0UsbWatch.exe"
 echo Launched. Closing in 3 seconds...
 timeout /t 3 /nobreak >nul

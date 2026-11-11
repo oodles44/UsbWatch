@@ -19,7 +19,7 @@ Requirements: Windows 10 or 11. The .NET Framework 4.x compiler it uses is part 
 1. Put `UsbWatch.cs`, `Build.bat`, `UsbWatch.ico` and `CHANGELOG.md` in one folder (a local folder like `C:\Tools\UsbWatch` is best, not a cloud-synced one).
 2. Double-click `Build.bat`.
 
-The script stops any running copy, compiles `UsbWatch.exe`, launches it, and closes itself after a few seconds. If the build fails it stays open so you can read the compiler error. The build date/time is stamped into the status bar as the version number.
+The script stops any running copy, compiles `UsbWatch.exe`, launches it, and closes itself after a few seconds. If the build fails it stays open so you can read the compiler error. The status bar and About dialog show the release version plus the exact build date/time, for example `v1.0.0 (build 2026.11.11-1549)`.
 
 ## Using it
 
@@ -61,6 +61,21 @@ If you want a long-lived history of every USB device a PC has ever seen, or a mo
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md). The same file is embedded in the exe and shown in Settings > About, so there is only one copy to maintain.
+
+### Versioning and releases
+
+UsbWatch follows [Semantic Versioning](https://semver.org/). The release version is taken from the newest `## [x.y.z]` heading in the changelog; the build date/time is added automatically on every build.
+
+To cut a release:
+
+1. Add a new `## [x.y.z] - date` section with bullets at the top of `CHANGELOG.md`.
+2. Run `Build.bat`.
+3. Tag and push: `git tag vx.y.z` then `git push origin vx.y.z`.
+4. Create a GitHub Release for the tag and attach `UsbWatch.exe`. Include its SHA-256 in the notes (`Get-FileHash UsbWatch.exe` in PowerShell) so downloaders can verify it.
+
+## Support
+
+UsbWatch is free and open source. If it saves you some time, you can [buy me a coffee](https://buymeacoffee.com/oodles44).
 
 ## License
 
