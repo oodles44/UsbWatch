@@ -335,10 +335,86 @@ class AboutForm : Form
     }
 }
 
+// "Start with Windows": a per-user Run-key value (no admin rights needed) that launches the exe with
+// --tray. The registry is the source of truth, so this is deliberately NOT stored in UsbWatch.ini:
+// that way the checkmark stays correct if the user turns it off in Task Manager > Startup apps.
+static class Startup
+{
+    const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string ApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    const string ValueName = "UsbWatch";
+
+    static string Command()
+    {
+        return "\"" + Application.ExecutablePath + "\" --tray";
+    }
+
+    public static bool IsEnabled()
+    {
+        try
+        {
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunPath))
+                if (k == null || k.GetValue(ValueName) == null) return false;
+            // Windows records "disabled in Task Manager / Settings" here: first byte 03 (or 07).
+            using (Microsoft.Win32.RegistryKey a = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(ApprovedPath))
+            {
+                if (a != null)
+                {
+                    byte[] b = a.GetValue(ValueName) as byte[];
+                    if (b != null && b.Length > 0 && (b[0] & 1) == 1) return false;
+                }
+            }
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public static bool Set(bool on)
+    {
+        try
+        {
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunPath))
+            {
+                if (on) k.SetValue(ValueName, Command());
+                else k.DeleteValue(ValueName, false);
+            }
+            // Clear any "disabled" flag so the choice made here wins.
+            using (Microsoft.Win32.RegistryKey a = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(ApprovedPath, true))
+                if (a != null) a.DeleteValue(ValueName, false);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // If autostart is on but points at an old location (exe moved or rebuilt elsewhere), repoint it.
+    public static void Refresh()
+    {
+        try
+        {
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunPath, true))
+            {
+                if (k == null) return;
+                string cur = k.GetValue(ValueName) as string;
+                if (cur != null && cur != Command()) k.SetValue(ValueName, Command());
+            }
+        }
+        catch { }
+    }
+}
+
 class MainForm : Form
 {
     const int WM_DEVICECHANGE = 0x0219;
     const int MaxRows = 2000;
+
+    // A second launch broadcasts this registered message so the running copy comes to the front.
+    static readonly int ShowMsg = (int)RegisterWindowMessage("UsbWatch.ShowWindow");
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint RegisterWindowMessage(string name);
+
+    [DllImport("user32.dll")]
+    static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
     static extern int SetWindowTheme(IntPtr hWnd, string appName, string idList);
@@ -365,6 +441,9 @@ class MainForm : Form
     ToolStripStatusLabel lblCount, lblProblems, lblLast;
     // Settings-menu toggles (saved to the ini). Pause stays a toolbar chip: it's used live.
     ToolStripMenuItem cbUsbOnly, cbHideIf, cbNotify, cbAuto, cbLog, cbTop, cbTray;
+    ToolStripMenuItem cbStartup;    // not in SavedItems(): its state lives in the registry
+    bool syncingStartup;
+    bool startHidden;               // launched with --tray: start with only the tray icon
     CheckBox cbPause;
     ContextMenuStrip settingsMenu;
     ToolStripMenuItem colMenuItem;
@@ -404,8 +483,9 @@ class MainForm : Form
     Font headFont = new Font("Segoe UI", 8.25f, FontStyle.Bold);
     string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UsbWatch.log");
 
-    public MainForm()
+    public MainForm(bool startInTray)
     {
+        startHidden = startInTray;
         Text = "UsbWatch";
         Font = uiFont;
         BackColor = Theme.Bg;
@@ -547,6 +627,7 @@ class MainForm : Form
         cbLog = AddToggle(settingsMenu.Items, "Log to file", false);
         cbTop = AddToggle(settingsMenu.Items, "Always on top", false);
         cbTray = AddToggle(settingsMenu.Items, "Close to tray", true);
+        cbStartup = AddToggle(settingsMenu.Items, "Start with Windows (in tray)", false);
         settingsMenu.Items.Add(new ToolStripSeparator());
 
         colMenuItem = new ToolStripMenuItem("Columns");
@@ -584,6 +665,24 @@ class MainForm : Form
         // Keep the menu open while toggling checkable items so several can be changed in one visit.
         settingsMenu.Closing += KeepMenuOpen;
         colSub.Closing += KeepMenuOpen;
+
+        // Start with Windows: re-read the registry each time the menu opens, write it on change.
+        settingsMenu.Opening += delegate
+        {
+            syncingStartup = true;
+            cbStartup.Checked = Startup.IsEnabled();
+            syncingStartup = false;
+        };
+        cbStartup.CheckedChanged += delegate
+        {
+            if (syncingStartup) return;
+            if (!Startup.Set(cbStartup.Checked))
+            {
+                syncingStartup = true;
+                cbStartup.Checked = Startup.IsEnabled();   // write failed: show the real state
+                syncingStartup = false;
+            }
+        };
 
         cbUsbOnly.CheckedChanged += delegate { prev = null; RequestRefresh(); };
         cbTop.CheckedChanged += delegate { TopMost = cbTop.Checked; };
@@ -659,6 +758,7 @@ class MainForm : Form
         // Restore saved toggles, columns and window geometry first (the toggles' handlers apply
         // their effects), then start saving changes.
         LoadSettings();
+        Startup.Refresh();
         ApplyColumns();
         foreach (KeyValuePair<string, ToolStripMenuItem> kv in SavedItems())
             kv.Value.CheckedChanged += delegate { SaveSettings(); };
@@ -1062,6 +1162,19 @@ class MainForm : Form
 
     // ---- window plumbing ----
 
+    // With --tray the form is never shown at startup, but it still needs a window handle (for
+    // device-change messages, timers and invokes), so create it and swallow the first Show.
+    protected override void SetVisibleCore(bool value)
+    {
+        if (startHidden)
+        {
+            startHidden = false;
+            if (!IsHandleCreated) CreateHandle();
+            value = false;
+        }
+        base.SetVisibleCore(value);
+    }
+
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
@@ -1069,6 +1182,10 @@ class MainForm : Form
         {
             debounce.Stop();
             debounce.Start();
+        }
+        else if (m.Msg == ShowMsg && ShowMsg != 0)
+        {
+            BringToView();   // another launch asked the running copy to come forward
         }
     }
 
@@ -1429,9 +1546,25 @@ class MainForm : Form
     }
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
-        Application.EnableVisualStyles();
-        Application.Run(new MainForm());
+        bool tray = false;
+        foreach (string a in args)
+            if (string.Equals(a, "--tray", StringComparison.OrdinalIgnoreCase)) tray = true;
+
+        // Single instance. A second normal launch brings the running window forward; a second
+        // --tray launch (e.g. autostart while it is already running) just exits quietly.
+        bool createdNew;
+        using (Mutex single = new Mutex(true, "Local\\UsbWatch.SingleInstance", out createdNew))
+        {
+            if (!createdNew)
+            {
+                if (!tray) PostMessage((IntPtr)0xFFFF, ShowMsg, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+            Application.EnableVisualStyles();
+            Application.Run(new MainForm(tray));
+            GC.KeepAlive(single);
+        }
     }
 }

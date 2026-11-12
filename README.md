@@ -34,11 +34,22 @@ The toolbar has **Pause**, **List current** (shows what is plugged in right now)
 | Log to file | Append everything shown in the list (including "List current" snapshots) to `UsbWatch.log` next to the exe |
 | Always on top | Keep the window above others |
 | Close to tray | X hides to the tray instead of exiting |
+| Start with Windows (in tray) | Launch at sign-in, hidden in the tray (see below) |
 | Columns | Choose any of Time, Event, Device, Class, VID:PID, Port, Status |
 | Copy all rows | Copy the whole list to the clipboard |
 | About | Version and changelog |
 
 Select rows and press Ctrl+C, or right-click, to copy a row or its full device instance ID.
+
+### Starting with Windows
+
+**Start with Windows (in tray)** adds a per-user entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) that runs `UsbWatch.exe --tray` when you sign in. No admin rights are needed, and it also appears under Windows Settings > Apps > Startup, where you can switch it off too. The checkmark always reflects the real registry state, so it is not stored in `UsbWatch.ini`.
+
+- Keep the exe in a local folder. A cloud-synced folder (Google Drive, OneDrive) may not be available yet at sign-in.
+- If you move or rebuild the exe elsewhere, the entry repoints itself the next time you run it.
+- Untick the setting before deleting UsbWatch, since there is no uninstaller to remove the entry.
+- Only one copy runs at a time. Launching UsbWatch again brings the running window forward.
+- `UsbWatch.exe --tray` can also be used on its own to start hidden in the tray.
 
 ### Settings file
 

@@ -7,6 +7,12 @@ version from it. Keep the format: a `## [x.y.z] - date` heading per release foll
 with the newest release first (do not add an `[Unreleased]` heading above it). The build date/time is
 appended to the version automatically at build time.
 
+## [1.1.0] - 2026-11-11
+- New setting: Start with Windows (in tray). Launches UsbWatch at sign-in, hidden in the tray
+- New command-line flag: --tray starts with only the tray icon, no window
+- Only one copy runs at a time: launching it again brings the running window forward
+- The startup entry follows the exe if you move or rebuild it, and honors Task Manager > Startup apps
+
 ## [1.0.0] - 2026-11-11
 - First public release
 - Live table of USB arrivals, removals and status changes, color-coded, with Windows error codes explained in plain English
